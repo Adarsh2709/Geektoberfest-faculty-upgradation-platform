@@ -10,7 +10,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import AppLayout from '../../components/common/AppLayout';
-import { getMyEnrollments, getEnrollmentById, updateProgress } from '../../api/enrollmentApi';
+import { getMyEnrollments, getEnrollmentById, updateProgress, downloadCertificate } from '../../api/enrollmentApi';
 
 const STATUS_COLOR = {
   enrolled: 'var(--color-accent)',
@@ -68,6 +68,7 @@ function MyCourses() {
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [downloadingId, setDownloadingId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,6 +139,60 @@ function MyCourses() {
     }
   };
 
+  const handleDownloadCertificate = async (enrollmentId, courseTitle) => {
+    setError('');
+    setMessage('');
+    setDownloadingId(enrollmentId);
+    try {
+      const res = await downloadCertificate(enrollmentId);
+
+      let filename = 'certificate.pdf';
+      const disposition = res.headers?.['content-disposition'] || res.headers?.['Content-Disposition'];
+      if (disposition) {
+        const match = disposition.match(/filename=["']?([^"';]+)["']?/i);
+        if (match?.[1]) {
+          filename = match[1].trim();
+        }
+      } else if (courseTitle) {
+        const safeSlug = courseTitle
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '') || 'course';
+        filename = `certificate-${safeSlug}.pdf`;
+      }
+
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      let errorMsg = 'Failed to generate certificate. Please try again.';
+      if (err.response?.data) {
+        try {
+          if (err.response.data instanceof Blob) {
+            const text = await err.response.data.text();
+            const parsed = JSON.parse(text);
+            if (parsed?.message) {
+              errorMsg = parsed.message;
+            }
+          } else if (typeof err.response.data === 'object' && err.response.data.message) {
+            errorMsg = err.response.data.message;
+          }
+        } catch {
+          // Fall back to default errorMsg
+        }
+      }
+      setError(errorMsg);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto animate-fadeIn">
@@ -186,7 +241,7 @@ function MyCourses() {
 
                   <ProgressBar value={enr.progress} color={color} />
 
-                  <div className="flex gap-3 mt-4">
+                  <div className="flex flex-wrap gap-3 mt-4">
                     <button className="btn-primary text-xs" onClick={() => handleOpen(enr._id)}>
                       {isOpen ? 'Close' : enr.status === 'completed' ? 'View Modules' : 'Open Course'}
                     </button>
@@ -194,6 +249,16 @@ function MyCourses() {
                       <Link to={`/courses/${course._id}`} className="btn-secondary text-xs" style={{ textDecoration: 'none' }}>
                         Course Details
                       </Link>
+                    )}
+                    {enr.status === 'completed' && (
+                      <button
+                        className="btn-secondary text-xs focus:ring-2 focus:ring-cyan-400 focus:outline-none"
+                        onClick={() => handleDownloadCertificate(enr._id, course?.title)}
+                        disabled={downloadingId === enr._id}
+                        aria-label={`Download certificate for ${course?.title || 'course'}`}
+                      >
+                        {downloadingId === enr._id ? 'Generating…' : 'Download Certificate 📜'}
+                      </button>
                     )}
                   </div>
 

@@ -16,6 +16,7 @@
 const Enrollment = require('../models/Enrollment');
 const Course = require('../models/Course');
 const { awardCreditsAndCheckAchievements } = require('../utils/creditCalculator');
+const { generateVerificationId, buildCertificatePdf } = require('../utils/certificate');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // @desc    Enroll the authenticated faculty in a course
@@ -225,4 +226,78 @@ const updateProgress = async (req, res, next) => {
   }
 };
 
-module.exports = { enrollInCourse, getMyEnrollments, getEnrollmentById, updateProgress };
+// ─────────────────────────────────────────────────────────────────────────────
+// @desc    Download course completion certificate PDF
+// @route   GET /api/enrollments/:id/certificate
+// @access  Protected (faculty)
+// ─────────────────────────────────────────────────────────────────────────────
+const getEnrollmentCertificate = async (req, res, next) => {
+  try {
+    const enrollment = await Enrollment.findById(req.params.id)
+      .populate('course')
+      .populate('faculty', 'name email department designation');
+
+    if (!enrollment) {
+      return res.status(404).json({ success: false, message: 'Enrollment not found' });
+    }
+
+    // Ownership check — faculty can only access their own certificate
+    const facultyId = enrollment.faculty?._id ? enrollment.faculty._id.toString() : enrollment.faculty?.toString();
+    if (facultyId !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied — this enrollment does not belong to you',
+      });
+    }
+
+    // Status check — certificate only for completed courses
+    if (enrollment.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Certificate is only available for completed courses',
+      });
+    }
+
+    const course = enrollment.course || {};
+    const facultyUser = enrollment.faculty || req.user || {};
+    const completionDate = enrollment.completedAt || enrollment.updatedAt || new Date();
+
+    const verificationId = generateVerificationId({
+      enrollmentId: enrollment._id.toString(),
+      facultyId: req.user._id.toString(),
+      courseId: (course._id || enrollment.course)?.toString(),
+      completionDate,
+    });
+
+    const pdfBuffer = await buildCertificatePdf({
+      facultyName: facultyUser.name || req.user.name || 'Faculty Member',
+      courseTitle: course.title || 'Course',
+      provider: course.provider || '',
+      instructor: course.instructor || '',
+      credits: course.credits ?? 0,
+      completionDate,
+      verificationId,
+    });
+
+    const safeSlug = (course.title || 'course')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'course';
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="certificate-${safeSlug}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+
+    return res.send(pdfBuffer);
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  enrollInCourse,
+  getMyEnrollments,
+  getEnrollmentById,
+  updateProgress,
+  getEnrollmentCertificate,
+};
