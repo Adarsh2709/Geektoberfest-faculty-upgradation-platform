@@ -17,6 +17,7 @@ const {
   getMyEnrollments,
   getEnrollmentById,
   updateProgress,
+  getEnrollmentCertificate,
 } = require('../controllers/enrollmentController');
 const { protect } = require('../middlewares/authMiddleware');
 
@@ -27,6 +28,9 @@ router.post('/:courseId', protect, enrollInCourse);
 
 // List enrollments — must come before /:id
 router.get('/my-courses', protect, getMyEnrollments);
+
+// Download certificate — specific sub-path on :id
+router.get('/:id/certificate', protect, getEnrollmentCertificate);
 
 // Single enrollment
 router.get('/:id', protect, getEnrollmentById);
