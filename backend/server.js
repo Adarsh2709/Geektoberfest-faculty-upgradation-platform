@@ -23,9 +23,7 @@ const courseRoutes      = require('./routes/courseRoutes');
 const enrollmentRoutes  = require('./routes/enrollmentRoutes');
 const creditRoutes      = require('./routes/creditRoutes');
 const achievementRoutes = require('./routes/achievementRoutes');
-
-// ─── Connect to Database ───────────────────────────────────────────────────
-connectDB();
+const adminRoutes       = require('./routes/adminRoutes');
 
 // ─── App Setup ────────────────────────────────────────────────────────────
 const app = express();
@@ -55,6 +53,7 @@ app.use('/api/courses',      courseRoutes);      // Phase 4 — course catalogue
 app.use('/api/enrollments',  enrollmentRoutes);  // Phase 4 — enrollment & progress
 app.use('/api/credits',      creditRoutes);      // Phase 4 — credit history
 app.use('/api/achievements', achievementRoutes); // Phase 4 — achievements
+app.use('/api/admin',        adminRoutes);       // Phase 6 — admin analytics & management
 
 // ─── 404 Handler (unmatched routes) ──────────────────────────────────────
 app.use((req, res) => {
@@ -69,10 +68,14 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // ─── Start Server ─────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 5000;
+if (require.main === module) {
+  connectDB();
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`🚀  Server running on http://localhost:${PORT}`);
+    console.log(`📋  Health check: http://localhost:${PORT}/api/health`);
+    console.log(`🌍  Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+}
 
-app.listen(PORT, () => {
-  console.log(`🚀  Server running on http://localhost:${PORT}`);
-  console.log(`📋  Health check: http://localhost:${PORT}/api/health`);
-  console.log(`🌍  Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+module.exports = app;
