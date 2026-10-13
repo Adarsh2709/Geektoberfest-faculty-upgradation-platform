@@ -39,20 +39,39 @@ const getCourses = async (req, res, next) => {
       ];
     }
 
-    const courses = await Course.find(filter)
+    const pageNum = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const hasPagination = req.query.page !== undefined || req.query.limit !== undefined;
+    const limitNum = hasPagination
+      ? Math.max(1, parseInt(req.query.limit, 10) || 9)
+      : 0;
+
+    const total = await Course.countDocuments(filter);
+    const totalPages = limitNum > 0 ? Math.ceil(total / limitNum) || 1 : 1;
+
+    let query = Course.find(filter)
       .select('-modules') // modules fetched only on single-course detail
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
 
+    if (limitNum > 0) {
+      query = query.skip((pageNum - 1) * limitNum).limit(limitNum);
+    }
+
+    const courses = await query;
+
     return res.status(200).json({
       success: true,
       count: courses.length,
+      total,
+      totalPages,
+      currentPage: pageNum,
       courses,
     });
   } catch (error) {
     next(error);
   }
 };
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // @desc    Get a single course with its full module list

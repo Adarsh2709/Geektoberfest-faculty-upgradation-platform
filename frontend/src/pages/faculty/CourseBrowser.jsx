@@ -145,13 +145,24 @@ function CourseBrowser() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [difficultyFilter, setDifficultyFilter] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
-  const fetchCourses = async () => {
+  const fetchCourses = async (page = currentPage) => {
     setLoading(true);
     setError('');
     try {
-      const res = await getCourses();
+      const params = { page, limit: 9 };
+      if (search.trim()) params.search = search.trim();
+      if (categoryFilter !== 'All') params.category = categoryFilter;
+      if (difficultyFilter !== 'All') params.difficulty = difficultyFilter;
+
+      const res = await getCourses(params);
       setCourses(res.data.courses || []);
+      setCurrentPage(res.data.currentPage || page);
+      setTotalPages(res.data.totalPages || 1);
+      setTotalCount(res.data.total ?? res.data.count ?? (res.data.courses || []).length);
     } catch {
       setError('Failed to load courses from server. Please try again.');
     } finally {
@@ -160,8 +171,15 @@ function CourseBrowser() {
   };
 
   useEffect(() => {
-    fetchCourses();
-  }, []);
+    fetchCourses(currentPage);
+  }, [currentPage, categoryFilter, difficultyFilter]);
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    setCurrentPage(1);
+    fetchCourses(1);
+  };
+
 
   // Categories
   const categories = useMemo(() => {
@@ -296,11 +314,37 @@ function CourseBrowser() {
                 <CourseCard key={course._id} course={course} />
               ))}
             </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-8 pt-4 border-t border-slate-700/50">
+                <button
+                  id="pagination-prev"
+                  className="btn-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1 || loading}
+                >
+                  ← Previous
+                </button>
+                <div className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>
+                  Page <span className="font-semibold text-white">{currentPage}</span> of{' '}
+                  <span className="font-semibold text-white">{totalPages}</span>
+                </div>
+                <button
+                  id="pagination-next"
+                  className="btn-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages || loading}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
     </AppLayout>
   );
 }
+
 
 export default CourseBrowser;
