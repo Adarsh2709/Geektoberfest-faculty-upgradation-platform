@@ -30,7 +30,21 @@ const creditSchema = new mongoose.Schema(
     creditsEarned: {
       type: Number,
       required: [true, 'Credits earned value is required'],
-      min: [0, 'Credits cannot be negative'],
+    },
+    type: {
+      type: String,
+      enum: ['auto_course', 'admin_bonus', 'admin_adjustment'],
+      default: 'auto_course',
+    },
+    issuedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    reason: {
+      type: String,
+      trim: true,
+      default: '',
     },
     // Human-readable note explaining why credits were awarded
     note: {
