@@ -26,6 +26,8 @@ const courseRoutes      = require('./routes/courseRoutes');
 const enrollmentRoutes  = require('./routes/enrollmentRoutes');
 const creditRoutes      = require('./routes/creditRoutes');
 const achievementRoutes = require('./routes/achievementRoutes');
+const adminRoutes       = require('./routes/adminRoutes');
+
 
 // ─── App Setup ────────────────────────────────────────────────────────────
 const app = express();
@@ -98,6 +100,7 @@ app.use('/api/courses',      courseRoutes);      // Phase 4 — course catalogue
 app.use('/api/enrollments',  enrollmentRoutes);  // Phase 4 — enrollment & progress
 app.use('/api/credits',      creditRoutes);      // Phase 4 — credit history
 app.use('/api/achievements', achievementRoutes); // Phase 4 — achievements
+app.use('/api/admin',        adminRoutes);       // Phase 6 — admin analytics & management
 
 // ─── 404 Handler (unmatched routes) ──────────────────────────────────────
 app.use((req, res) => {
