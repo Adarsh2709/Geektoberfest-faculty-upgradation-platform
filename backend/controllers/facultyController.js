@@ -56,11 +56,22 @@ const updateProfile = async (req, res, next) => {
       });
     }
 
+    if (updates.name !== undefined) {
+      if (typeof updates.name !== 'string' || !updates.name.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Name cannot be empty',
+        });
+      }
+      updates.name = updates.name.trim();
+    }
+
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updates },
       { new: true, runValidators: true }
     ).select('-password');
+
 
     return res.status(200).json({
       success: true,
