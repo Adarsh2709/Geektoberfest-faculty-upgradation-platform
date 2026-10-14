@@ -1,7 +1,45 @@
 const fs = require('fs');
 const path = require('path');
 
-function patchDirectory(dir) {
+function patchFile(fullPath) {
+  try {
+    let content = fs.readFileSync(fullPath, 'utf8');
+    if (!content.includes('node:util')) return;
+    if (!content.includes('styleText') && !content.includes('parseEnv')) return;
+
+    let modified = false;
+    const utilImportRegex = /import\s*\{([^}]+)\}\s*from\s*["']node:util["'];?/g;
+    const newContent = content.replace(utilImportRegex, (match, imports) => {
+      const specifiers = imports.split(',').map(s => s.trim()).filter(Boolean);
+      const hasStyleText = specifiers.includes('styleText');
+      const hasParseEnv = specifiers.includes('parseEnv');
+      if (!hasStyleText && !hasParseEnv) return match;
+
+      modified = true;
+      const filtered = specifiers.filter(s => s !== 'styleText' && s !== 'parseEnv');
+      let res = '';
+      if (filtered.length > 0) {
+        res += `import { ${filtered.join(', ')} } from "node:util";\n`;
+      }
+      if (hasStyleText && !content.includes('const styleText =')) {
+        res += 'const styleText = (_fmt, text) => (typeof text === "string" ? text : (text !== undefined && text !== null ? String(text) : ""));\n';
+      }
+      if (hasParseEnv && !content.includes('const parseEnv =')) {
+        res += 'const parseEnv = (c) => { const r = {}; (c || "").split(/\\r?\\n/).forEach(l => { const m = l.match(/^\\s*([\\w.-]+)\\s*=\\s*(.*)?\\s*$/); if (m) r[m[1]] = (m[2] || "").trim().replace(/^[\'"]|[\'"]$/g, ""); }); return r; };\n';
+      }
+      return res;
+    });
+
+    if (modified) {
+      fs.writeFileSync(fullPath, newContent, 'utf8');
+      console.log(`[patch-node18] Successfully patched ${fullPath}`);
+    }
+  } catch (err) {
+    console.warn(`[patch-node18] Error patching ${fullPath}: ${err.message}`);
+  }
+}
+
+function scanAndPatch(dir) {
   if (!fs.existsSync(dir)) return;
   try {
     const items = fs.readdirSync(dir);
@@ -9,36 +47,23 @@ function patchDirectory(dir) {
       const full = path.join(dir, item);
       const stat = fs.statSync(full);
       if (stat.isDirectory()) {
-        patchDirectory(full);
+        scanAndPatch(full);
       } else if (full.endsWith('.mjs') || full.endsWith('.js') || full.endsWith('.cjs')) {
-        let content = fs.readFileSync(full, 'utf8');
-        if (content.includes('styleText') && content.includes('"node:util"')) {
-          const original = content;
-          content = content.replace(
-            /import\s*\{\s*formatWithOptions,\s*styleText\s*\}\s*from\s*["']node:util["'];?/g,
-            'import { formatWithOptions } from "node:util"; const styleText = (_fmt, text) => (typeof text === "string" ? text : (text !== undefined && text !== null ? String(text) : ""));'
-          );
-          content = content.replace(
-            /import\s*\{\s*styleText,\s*formatWithOptions\s*\}\s*from\s*["']node:util["'];?/g,
-            'import { formatWithOptions } from "node:util"; const styleText = (_fmt, text) => (typeof text === "string" ? text : (text !== undefined && text !== null ? String(text) : ""));'
-          );
-          content = content.replace(
-            /import\s*\{\s*styleText\s*\}\s*from\s*["']node:util["'];?/g,
-            'const styleText = (_fmt, text) => (typeof text === "string" ? text : (text !== undefined && text !== null ? String(text) : ""));'
-          );
-          if (content !== original) {
-            fs.writeFileSync(full, content, 'utf8');
-            console.log(`[patch-node18] Patched styleText in ${full}`);
-          }
-        }
+        patchFile(full);
       }
     }
   } catch (err) {
-    console.warn(`[patch-node18] Warning while patching: ${err.message}`);
+    console.warn(`[patch-node18] Error scanning directory ${dir}: ${err.message}`);
   }
 }
 
-const rolldownDir = path.resolve(__dirname, 'node_modules/rolldown');
-if (fs.existsSync(rolldownDir)) {
-  patchDirectory(rolldownDir);
+const targetDirs = [
+  path.resolve(__dirname, 'node_modules/rolldown'),
+  path.resolve(__dirname, 'node_modules/vite')
+];
+
+for (const dir of targetDirs) {
+  if (fs.existsSync(dir)) {
+    scanAndPatch(dir);
+  }
 }
