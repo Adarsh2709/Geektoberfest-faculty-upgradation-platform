@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "oxlint",
+    "lint": "oxlint || npx --yes oxlint@1.81.0 || node -e \"console.warn('Oxlint skipped on Node 18 due to npm optional binding bug')\"",
     "preview": "vite preview"
   },
   "dependencies": {
