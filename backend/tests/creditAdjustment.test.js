@@ -23,13 +23,16 @@ describe('Admin Credit Manual Adjustment Tests (POST /api/credits/admin/adjust)'
 
   const adminId = new mongoose.Types.ObjectId();
   const facultyUserId = new mongoose.Types.ObjectId();
+  const studentUserId = new mongoose.Types.ObjectId();
 
   const adminToken = jwt.sign({ id: adminId.toString() }, JWT_SECRET);
   const facultyToken = jwt.sign({ id: facultyUserId.toString() }, JWT_SECRET);
+  const studentToken = jwt.sign({ id: studentUserId.toString() }, JWT_SECRET);
 
   let creditsStore = [];
 
   let originalUserFindById;
+  let originalUserFind;
   let originalCreditCreate;
   let originalCreditFind;
 
@@ -45,6 +48,7 @@ describe('Admin Credit Manual Adjustment Tests (POST /api/credits/admin/adjust)'
     });
 
     originalUserFindById = User.findById;
+    originalUserFind = User.find;
     originalCreditCreate = Credit.create;
     originalCreditFind = Credit.find;
 
@@ -74,7 +78,35 @@ describe('Admin Credit Manual Adjustment Tests (POST /api/credits/admin/adjust)'
           isActive: true,
         });
       }
+      if (idStr === studentUserId.toString()) {
+        return createObj({
+          _id: studentUserId,
+          name: 'Student User',
+          email: 'student@test.edu',
+          role: 'student',
+          isActive: true,
+        });
+      }
       return { select: () => Promise.resolve(null) };
+    };
+
+    // Stub User.find
+    User.find = function (query) {
+      const facultyList = [
+        {
+          _id: facultyUserId,
+          name: 'Faculty Member',
+          email: 'faculty@test.edu',
+          department: 'Computer Science',
+          designation: 'Professor',
+          role: 'faculty',
+        },
+      ];
+      return {
+        select: () => ({
+          sort: () => Promise.resolve(facultyList),
+        }),
+      };
     };
 
     // Stub Credit.create
@@ -99,6 +131,7 @@ describe('Admin Credit Manual Adjustment Tests (POST /api/credits/admin/adjust)'
 
   after(async () => {
     User.findById = originalUserFindById;
+    User.find = originalUserFind;
     Credit.create = originalCreditCreate;
     Credit.find = originalCreditFind;
     if (server) await new Promise((resolve) => server.close(resolve));
@@ -202,5 +235,49 @@ describe('Admin Credit Manual Adjustment Tests (POST /api/credits/admin/adjust)'
       adminToken
     );
     assert.equal(res2.status, 400);
+  });
+
+  it('rejects adjustment if target user does not have faculty role with 400', async () => {
+    const res = await request(
+      'POST',
+      '/api/credits/admin/adjust',
+      {
+        facultyId: studentUserId.toString(),
+        creditsEarned: 5,
+        reason: 'Attempt on student',
+      },
+      adminToken
+    );
+    assert.equal(res.status, 400);
+    assert.match(res.body.message, /faculty role/i);
+  });
+
+  it('derives credit type server-side and ignores client-supplied type', async () => {
+    const res = await request(
+      'POST',
+      '/api/credits/admin/adjust',
+      {
+        facultyId: facultyUserId.toString(),
+        creditsEarned: 4,
+        type: 'auto_course',
+        reason: 'Attempting to spoof auto_course type',
+      },
+      adminToken
+    );
+    assert.equal(res.status, 201);
+    assert.equal(res.body.credit.type, 'admin_bonus');
+  });
+
+  it('allows admin to fetch faculty list (GET /api/faculty)', async () => {
+    const res = await request('GET', '/api/faculty', null, adminToken);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.success, true);
+    assert.ok(Array.isArray(res.body.faculty));
+    assert.equal(res.body.faculty[0].name, 'Faculty Member');
+  });
+
+  it('rejects non-admin from fetching faculty list (GET /api/faculty) with 403', async () => {
+    const res = await request('GET', '/api/faculty', null, facultyToken);
+    assert.equal(res.status, 403);
   });
 });

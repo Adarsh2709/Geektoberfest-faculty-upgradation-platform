@@ -43,9 +43,11 @@ function CreditManagement() {
       const data = await res.json();
       if (data.success) {
         setFacultyList(data.faculty || []);
+      } else {
+        setError(data.message || 'Failed to load faculty list');
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      setError(err.message || 'Failed to connect to faculty service');
     }
   };
 

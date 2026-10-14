@@ -66,7 +66,13 @@ const adjustCredits = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Faculty member not found' });
     }
 
-    const creditType = type || (numCredits > 0 ? 'admin_bonus' : 'admin_adjustment');
+    // Verify target user has the faculty role
+    if (facultyUser.role !== 'faculty') {
+      return res.status(400).json({ success: false, message: 'Target user must have the faculty role' });
+    }
+
+    // Always derive credit type server-side to prevent misleading audit entries (ignore client-supplied type)
+    const creditType = numCredits > 0 ? 'admin_bonus' : 'admin_adjustment';
 
     const credit = await Credit.create({
       faculty: facultyId,

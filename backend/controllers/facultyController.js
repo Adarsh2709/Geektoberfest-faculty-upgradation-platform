@@ -72,4 +72,26 @@ const updateProfile = async (req, res, next) => {
   }
 };
 
-module.exports = { getProfile, updateProfile };
+// ─────────────────────────────────────────────────────────────────────────────
+// @desc    Get list of all faculty members for admin dropdown selectors
+// @route   GET /api/faculty
+// @access  Protected (admin)
+// ─────────────────────────────────────────────────────────────────────────────
+const getFacultyList = async (req, res, next) => {
+  try {
+    const faculty = await User.find({ role: 'faculty' })
+      .select('_id name email department designation')
+      .sort({ name: 1 });
+
+    return res.status(200).json({
+      success: true,
+      count: faculty.length,
+      faculty,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { getProfile, updateProfile, getFacultyList };
+
